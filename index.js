@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
-
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 3000;
@@ -22,11 +22,56 @@ const client = new MongoClient(uri, {
   }
 });
 
+const verifyToken = (req, res, next) => {
+    if (!req.headers.authorization) {
+        return res.status(401).send('Access Denied');
+    }
+    const token = req.headers.authorization.split(' ')[1];
+    if (!token) {
+        return res.status(401).send('Access Denied');
+    }
+    
+    jwt.verify(token, process.env.JWT_Secret, (err, decoded) => {
+        if (err) {
+            return res.status(401).send('Access Denied');
+        }
+
+    req.decoded = decoded;
+    next();
+    });
+};
+
+
 async function run() {
   try {
     await client.connect();
     const UserCollection = client.db("hive").collection("users");
     const AnnouncementsCollection = client.db("hive").collection("announcements");
+
+    app.post('/jwt', (req, res) => {
+        const user = req.body;
+        const token = jwt.sign(user, process.env.JWT_Secret, { expiresIn: '1h' });
+        res.send({ token });
+    });
+
+    app.get('/users', verifyToken, async (req, res) => {
+        const users = await UserCollection.find().toArray();
+        res.json(users);
+    });
+
+    app.get('/user/admin/:email', verifyToken, async (req, res) => {
+        const email = req.params.email;
+        if(email !== req.decoded.email) {
+            return res.status(401).send('Access Denied');
+        }
+
+        const user = await UserCollection.findOne({ email: email });
+        if(user) {
+            admin = user.role === 'admin';
+        }
+        res.json({admin});
+    }
+    );
 
     app.post('/users', async (req, res) => {
       const { name, email, photo, membership, role, registerDate } = req.body;
