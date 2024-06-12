@@ -7,7 +7,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: ['http://localhost:5174'],
+  origin: ['http://localhost:5174','http://localhost:5173'],
   credentials: true
 }));
 app.use(express.json());
@@ -58,8 +58,9 @@ async function run() {
     });
 
     app.get('/recent-posts/:email', async (req, res) => {
+        console.log('recent-posts');
         const email = req.params.email;
-        const posts = await PostCollection.find({ email: email }).sort({ dateAdded: -1 }).limit(3).toArray();
+        const posts = await PostCollection.find({ owner: email }).sort({ dateAdded: -1 }).limit(3).toArray();
         res.json(posts);
       });
 
@@ -68,6 +69,35 @@ async function run() {
         res.json(tags);
     }
     );
+
+    app.post('/posts', verifyToken, async (req, res) => {
+        const { title, description, owner, tag, upVote, downVote, visibility,dateAdded } = req.body;
+        const newPost = await PostCollection.insertOne({ title, description, owner, tag, upVote, downVote, visibility,dateAdded });
+        res.status(201).send('Post created successfully');
+    });
+
+    app.get('/posts/:email', async (req, res) => {
+        const email = req.params.email;
+        const posts = await PostCollection.find({ owner: email }).toArray();
+        res.json(posts);
+    });
+
+    app.delete('/post/:id', async (req, res) => {
+      console.log('delete post');
+        const id = req.params.id;
+        const result = await PostCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 1) {
+            res.status(200).send('Post deleted successfully');
+        } else {
+            res.status(400).send('Failed to delete post');
+        }
+    });
+
+    app.get('comments/:postId', async (req, res) => {
+        const postId = req.params.postId;
+        const comments = await CommentsCollection.find({ postId: postId }).toArray();
+        res.json(comments);
+    });
       
 
     app.patch('/users/:email/aboutMe', verifyToken, async (req, res) => {
