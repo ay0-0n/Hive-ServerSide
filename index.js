@@ -7,7 +7,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: ['http://localhost:5173'],
+  origin: ['http://localhost:5174'],
   credentials: true
 }));
 app.use(express.json());
@@ -47,6 +47,9 @@ async function run() {
     await client.connect();
     const UserCollection = client.db("hive").collection("users");
     const AnnouncementsCollection = client.db("hive").collection("announcements");
+    const CommentsCollection = client.db("hive").collection("comments");
+    const TagCollection = client.db("hive").collection("tags");
+    const PostCollection = client.db("hive").collection("posts");
 
     app.post('/jwt', (req, res) => {
         const user = req.body;
@@ -54,9 +57,68 @@ async function run() {
         res.send({ token });
     });
 
+    app.get('/recent-posts/:email', async (req, res) => {
+        const email = req.params.email;
+        const posts = await PostCollection.find({ email: email }).sort({ dateAdded: -1 }).limit(3).toArray();
+        res.json(posts);
+      });
+
+    app.get('/tags', async (req, res) => {
+        const tags = await TagCollection.find().toArray();
+        res.json(tags);
+    }
+    );
+      
+
+    app.patch('/users/:email/aboutMe', verifyToken, async (req, res) => {
+        const email = req.params.email;
+        const { aboutMe } = req.body;
+        if (email !== req.decoded.email) {
+          return res.status(401).send('Access Denied');
+        }
+        const result = await UserCollection.updateOne(
+          { email: email },
+          { $set: { aboutMe: aboutMe } }
+        );
+        if (result.modifiedCount === 1) {
+          res.status(200).send('About Me updated successfully');
+        } else {
+          res.status(400).send('Failed to update About Me');
+        }
+      });
+      
+
+    app.post('/admin/tag', verifyToken, async (req, res) => {
+        const { name, email, dateAdded } = req.body;
+        const tag = await TagCollection.findOne({ name: name });
+        if (tag) {
+            console.log('Tag already exists');
+            res.status(400).send('Tag already exists');
+        } else {
+            const newTag = await TagCollection.insertOne({ name, email, dateAdded });
+            res.status(201).send('Tag created successfully');
+        }
+    });
+
+    app.get('/posts', async (req, res) => {
+        const posts = await PostCollection.find().toArray();
+        res.json(posts);
+    });
+
+    app.get('/comments', async (req, res) => {
+        const comments = await CommentsCollection.find().toArray();
+        res.json(comments);
+    });
+
     app.get('/users', verifyToken, async (req, res) => {
         const users = await UserCollection.find().toArray();
         res.json(users);
+    });
+
+    app.get('/user/:email', verifyToken, async (req, res) => {
+        const email = req.params.email;
+        const user = await UserCollection.findOne({ email: email });
+        res.json(user);
     });
 
     app.get('/user/admin/:email', verifyToken, async (req, res) => {
