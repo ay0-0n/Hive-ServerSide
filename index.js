@@ -58,7 +58,6 @@ async function run() {
     });
 
     app.get('/recent-posts/:email', async (req, res) => {
-        console.log('recent-posts');
         const email = req.params.email;
         const posts = await PostCollection.find({ owner: email }).sort({ dateAdded: -1 }).limit(3).toArray();
         res.json(posts);
@@ -76,6 +75,23 @@ async function run() {
         res.status(201).send('Post created successfully');
     });
 
+
+
+    app.patch('/post/visibility/:id', async (req, res) => {
+        const id = req.params.id;
+        const visibility = req.body.visibility;
+        const result = await PostCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { visibility: !visibility } }
+        );
+        if (result.modifiedCount === 1) {
+          res.status(200).send('Visibility updated successfully');
+        } else {
+          res.status(400).send('Failed to update visibility');
+        }
+    }
+    );
+
     app.get('/posts/:email', async (req, res) => {
         const email = req.params.email;
         const posts = await PostCollection.find({ owner: email }).toArray();
@@ -83,7 +99,6 @@ async function run() {
     });
 
     app.delete('/post/:id', async (req, res) => {
-      console.log('delete post');
         const id = req.params.id;
         const result = await PostCollection.deleteOne({ _id: new ObjectId(id) });
         if (result.deletedCount === 1) {
@@ -145,7 +160,7 @@ async function run() {
         res.json(users);
     });
 
-    app.get('/user/:email', verifyToken, async (req, res) => {
+    app.get('/user/:email', async (req, res) => {
         const email = req.params.email;
         const user = await UserCollection.findOne({ email: email });
         res.json(user);
@@ -176,9 +191,33 @@ async function run() {
       }
     });
 
+    app.post('/announcement', verifyToken, async (req, res) => {
+      console.log("asasasass");
+      const { title, authorName,authorEmail, authorPhoto ,description,date } = req.body;
+      const newAnnouncement = await AnnouncementsCollection.insertOne({ title, authorName,authorEmail, authorPhoto, description,date });
+      res.status(201).send('Announcement created successfully');
+  });
+
     app.get('/announcements', async (req, res) => {
         const announcements = await AnnouncementsCollection.find().toArray();
         res.json(announcements);
+    });
+
+    app.get('/announcements/:email', async (req, res) => {
+        const email = req.params.email;
+        const announcements = await AnnouncementsCollection.find({ authorEmail: email }).toArray();
+        res.json(announcements);
+    }
+    );
+
+    app.delete('/announcement/:id', async (req, res) => {
+        const id = req.params.id;
+        const result = await AnnouncementsCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 1) {
+            res.status(200).send('Announcement deleted successfully');
+        } else {
+            res.status(400).send('Failed to delete announcement');
+        }
     });
 
     console.log("Successfully connected to MongoDB!");
