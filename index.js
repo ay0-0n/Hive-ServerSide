@@ -131,6 +131,21 @@ async function run() {
           res.status(400).send('Failed to update About Me');
         }
       });
+
+    app.patch('/users/admin/:email', verifyToken, async (req, res) => {
+        const email = req.params.email;
+        const { role } = req.body;
+        const result = await UserCollection.updateOne(
+          { email: email },
+          { $set: { role: role } }
+        );
+        if (result.modifiedCount === 1) {
+          res.status(200).send('Role updated successfully');
+        } else {
+          res.status(400).send('Failed to update role');
+        }
+      } 
+    );
       
 
     app.post('/admin/tag', verifyToken, async (req, res) => {
@@ -155,10 +170,27 @@ async function run() {
         res.json(comments);
     });
 
-    app.get('/users', verifyToken, async (req, res) => {
+    app.get('/users', async (req, res) => {
         const users = await UserCollection.find().toArray();
         res.json(users);
     });
+
+    app.get('/users/search', async (req, res) => {
+        const username = req.query.username;
+        const users = await UserCollection.find({ name: { $regex: username, $options: 'i' } }).toArray();
+        res.json(users);
+    });
+
+    app.delete('/users/:email',verifyToken, async (req, res) => {
+        const email = req.params.email;
+        const result = await UserCollection.deleteOne({ email: email });
+        if (result.deletedCount === 1) {
+            res.status(200).send('User deleted successfully');
+        } else {
+            res.status(400).send('Failed to delete user');
+        }
+    } );
+
 
     app.get('/user/:email', async (req, res) => {
         const email = req.params.email;
