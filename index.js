@@ -5,6 +5,7 @@ require('dotenv').config();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 3000;
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 app.use(cors({
   origin: ['http://localhost:5174','http://localhost:5173'],
@@ -50,6 +51,57 @@ async function run() {
     const CommentsCollection = client.db("hive").collection("comments");
     const TagCollection = client.db("hive").collection("tags");
     const PostCollection = client.db("hive").collection("posts");
+    const PostReportsCollection = client.db("hive").collection("postReports")
+    const CommentsReportsCollection = client.db("hive").collection("commentsReports")
+    const PaymentCollection = client.db("hive").collection("payments")
+
+    //Stripe
+    app.post('/create-payment-intent',verifyToken, async (req, res) => {
+      const {price} = req.body;
+      const amount = price * 100; 
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card'],
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    app.post('/payments',verifyToken, async (req, res) => {
+      const {user, amount, transaction_id, date} = req.body;
+      const newPayment = await PaymentCollection.insertOne({user, amount, transaction_id, date });
+      res.status(201).send('Payment created successfully');
+    }
+    );
+
+    app.patch('/user/membership/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const result = await UserCollection.updateOne(
+        { email: email },
+        { $set: { membership: true } }
+      );
+      if (result.modifiedCount === 1) {
+        res.status(200).send('Membership updated successfully');
+      } else {
+        res.status(400).send('Failed to update membership');
+      }
+    });
+
+    app.get('/post-reports', verifyToken, (req, res)=>{
+      const postReports = PostReportsCollection.find().toArray()
+      res.json(postReports)
+    })
+
+
+    app.get('/comments-reports', verifyToken, (req, res)=>{
+      const commentsReports = CommentsReportsCollection.find().toArray()
+      res.json(commentsReports)
+    }
+    )
 
     app.post('/jwt', (req, res) => {
         const user = req.body;
