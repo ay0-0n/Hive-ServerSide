@@ -54,6 +54,66 @@ async function run() {
     const PostReportsCollection = client.db("hive").collection("postReports")
     const CommentsReportsCollection = client.db("hive").collection("commentsReports")
     const PaymentCollection = client.db("hive").collection("payments")
+    const SearchCollection = client.db("hive").collection("searches");
+
+
+
+    //Homepage Routes
+    app.post('/posts/search', async (req, res) => {
+      const { user, searchTag, date,  } = req.body;
+      const newSearch = await SearchCollection.insertOne({ user, searchTag, date });
+      res.status(201).send('Search created successfully');
+    });
+  
+    app.get('/searches/popular', async (req, res) => {
+      const searches = await SearchCollection.aggregate([
+          { $group: { _id: "$searchTag", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 3 }
+      ]).toArray();
+      res.json(searches.map(search => search._id));
+    });
+
+    app.get('/posts/visible', async (req, res) => {
+      const posts = await PostCollection.find({ visibility: true }).toArray();
+      res.json(posts);
+    }
+    );
+
+    app.get('/posts/tag/:tag', async (req, res) => {
+      const { tag } = req.params;
+      const posts = await PostCollection.find({
+        tag: { $regex: tag, $options: 'i' },
+        visibility: true
+      })
+      .sort({ dateAdded: -1 })
+      .toArray();
+      res.json(posts);
+    });
+
+    app.get('/posts/:tag', async (req, res) => {
+      const {tag}  = req.params;
+      console.log(tag);
+      const posts = await PostCollection.find({ tag: tag }).toArray();
+      res.json(posts);
+    }
+    );
+
+  app.get('/posts/sort/:type', async (req, res) => {
+    const { type } = req.params;
+    let sortQuery = {};
+    if (type === 'popularity') {
+        sortQuery = { upVote: -1, downVote: 1 };
+    } else if (type === 'comments') {
+        sortQuery = { commentCount: -1 };
+    }
+    const posts = (await PostCollection.find().sort(sortQuery).toArray()).filter(post => post.visibility === true);
+
+    res.json(posts);
+});
+
+
+  
 
     //Stripe
     app.post('/create-payment-intent',verifyToken, async (req, res) => {
