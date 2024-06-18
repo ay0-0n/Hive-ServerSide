@@ -55,6 +55,10 @@ async function run() {
     const CommentsReportsCollection = client.db("hive").collection("commentsReports")
     const PaymentCollection = client.db("hive").collection("payments")
     const SearchCollection = client.db("hive").collection("searches");
+    const VoteCollection = client.db("hive").collection("votes");
+
+
+    //Votes
 
 
 
