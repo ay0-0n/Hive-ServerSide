@@ -3,6 +3,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const e = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -55,12 +56,56 @@ async function run() {
     const CommentsReportsCollection = client.db("hive").collection("commentsReports")
     const PaymentCollection = client.db("hive").collection("payments")
     const SearchCollection = client.db("hive").collection("searches");
-    const VoteCollection = client.db("hive").collection("votes");
+    const VotesCollection = client.db("hive").collection("votes");
 
 
     //Votes
+    app.post('/votes', async (req, res) => {
+      const { user, postId, voteType, date } = req.body;
+      const newVote = await VotesCollection.insertOne({ user, postId, voteType, date });
+      res.status(201).send('Vote created successfully');
+    }
+    );
+
+    app.delete('/votes/:id', async (req, res) => {
+      const id = req.params.id;
+      const result = await VotesCollection.deleteOne({ _id: new ObjectId(id) });
+      if (result.deletedCount === 1) {
+          res.status(200).send('Vote deleted successfully');
+      } else {
+          res.status(400).send('Failed to delete vote');
+      }
+    }
+    );
+
+    app.patch('/votes/:id', async (req, res) => {
+      const id = req.params.id;
+      const { voteType, date } = req.body;
+      const result = await VotesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { voteType: voteType, date: date } }
+      );
+      if (result.modifiedCount === 1) {
+        res.status(200).send('Vote updated successfully');
+      }
+      else {
+        res.status(400).send('Failed to update vote');
+      }
+    }
+    );
+
+    app.get('/votes', async (req, res) => {
+      const votes = await VotesCollection.find().toArray();
+      res.json(votes);
+    });
 
 
+    app.get('/votes/:email', async (req, res) => {
+      const email = req.params.email;
+      const votes = await VotesCollection.find({ user:email }).toArray();
+      res.json(votes);
+    }
+    );
 
     //Homepage Routes
     app.post('/posts/search', async (req, res) => {
@@ -79,7 +124,7 @@ async function run() {
     });
 
     app.get('/posts/visible', async (req, res) => {
-      const posts = await PostCollection.find({ visibility: true }).toArray();
+      const posts = await PostCollection.find({ visibility: true }).sort({ dateAdded: -1 }).toArray();
       res.json(posts);
     }
     );
@@ -97,28 +142,51 @@ async function run() {
 
     app.get('/posts/:tag', async (req, res) => {
       const {tag}  = req.params;
-      console.log(tag);
-      const posts = await PostCollection.find({ tag: tag }).toArray();
+      const posts = await PostCollection.find({ tag: tag }).sort({ dateAdded: -1 }).toArray();
       res.json(posts);
     }
     );
 
-  app.get('/posts/sort/:type', async (req, res) => {
-    const { type } = req.params;
-    let sortQuery = {};
-    if (type === 'popularity') {
-        sortQuery = { upVote: -1, downVote: 1 };
-    } else if (type === 'comments') {
-        sortQuery = { commentCount: -1 };
-    }
-    const posts = (await PostCollection.find().sort(sortQuery).toArray()).filter(post => post.visibility === true);
+    app.get('/posts/sort/:type', async (req, res) => {
+      const { type } = req.params;
+    
+      try {
+        let posts = await PostCollection.find({ visibility: true }).sort({ dateAdded: -1 }).toArray();
+    
+        if (type === 'popularity') {
+          const votes = await VotesCollection.find().toArray();
+    
+          posts = posts.map(post => {
+            const postVotes = votes.filter(vote => vote.postId.toString() === post._id.toString());
+            const upVotes = postVotes.filter(vote => vote.voteType === 'up').length;
+            const downVotes = postVotes.filter(vote => vote.voteType === 'down').length;
+            post.popularity = upVotes - downVotes;
+            return post;
+          });
+          
+          posts.sort((a, b) => b.popularity - a.popularity);
+        } else if (type === 'comments') {
 
-    res.json(posts);
-});
-
-
+          const comments = await CommentsCollection.find().toArray();
+    
+          posts = posts.map(post => {
+            post.commentCount = comments.filter(comment => comment.postID.toString() === post._id.toString()).length;
+            return post;
+          });
+    
+          posts.sort((a, b) => b.commentCount - a.commentCount);
+    
+        } else {
+          return res.status(400).json({ error: 'Invalid sort type' });
+        }
+        res.json(posts);
+    
+      } catch (error) {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+    
   
-
     //Stripe
     app.post('/create-payment-intent',verifyToken, async (req, res) => {
       const {price} = req.body;
@@ -186,8 +254,8 @@ async function run() {
     );
 
     app.post('/posts', verifyToken, async (req, res) => {
-        const { title, description, owner, tag, upVote, downVote, visibility,dateAdded } = req.body;
-        const newPost = await PostCollection.insertOne({ title, description, owner, tag, upVote, downVote, visibility,dateAdded });
+        const { title, description, owner, tag, visibility,dateAdded } = req.body;
+        const newPost = await PostCollection.insertOne({ title, description, owner, tag, visibility,dateAdded });
         res.status(201).send('Post created successfully');
     });
 
@@ -208,6 +276,15 @@ async function run() {
     }
     );
 
+    app.get('/posts/mypost/:email', async (req, res) => {
+      const email = req.params.email;
+      console.log("hey",email); 
+      const posts = await PostCollection.find({ owner: email }).sort({ dateAdded: -1 }).toArray();
+      res.json(posts);
+    }
+    );
+
+    //check later
     app.get('/posts/:email', async (req, res) => {
         const email = req.params.email;
         const posts = await PostCollection.find({ owner: email }).toArray();
