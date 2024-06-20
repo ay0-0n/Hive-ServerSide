@@ -59,6 +59,138 @@ async function run() {
     const VotesCollection = client.db("hive").collection("votes");
 
 
+    //REports
+    app.post('/post-reports', verifyToken, async (req, res) => {
+      const { postID, reporterEmail ,feedback, date } = req.body;
+      const newReport = await PostReportsCollection.insertOne({ postID, reporterEmail ,feedback, date });
+      res.status(201).send('Report created successfully');
+    }
+    );
+    app.post('/comment-reports', verifyToken, async (req, res) => {
+      const { commentID, reporterEmail ,feedback, date } = req.body;
+      const newReport = await CommentsReportsCollection.insertOne({ commentID, reporterEmail ,feedback, date });
+      res.status(201).send('Report created successfully');
+    }
+    );
+    app.get('/post-reports', async(req, res)=>{
+      const postReports = await PostReportsCollection.find().sort({date:-1}).toArray()
+      res.json(postReports)
+    })
+
+    app.delete('/post-reports/:id', async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const result = await PostReportsCollection.deleteOne({ _id: new ObjectId(id) });
+      if (result.deletedCount === 1) {
+          res.status(200).send('Report deleted successfully');
+      } else {
+          res.status(400).send('Failed to delete report');
+      }
+    }
+    );
+
+    app.delete('/post-reports/all/:id', async (req, res) => {
+      const id = req.params.id;
+      const result = await PostReportsCollection.deleteMany({ postID: id });
+      if (result.deletedCount > 0) {
+          res.status(200).send('All reports deleted successfully');
+      } else {
+          res.status(400).send('Failed to delete reports');
+      }
+    }
+    );
+
+    app.delete('/comment-reports/all/:id', async (req, res) => {
+      const id = req.params.id;
+      const result = await CommentsReportsCollection.deleteMany({ commentID: id });
+      if (result.deletedCount > 0) {
+          res.status(200).send('All reports deleted successfully');
+      } else {
+          res.status(400).send('Failed to delete reports');
+      }
+    }
+    );
+
+    app.delete('/comment-reports/:id', async (req, res) => {
+      const id = req.params.id;
+      const result = await CommentsReportsCollection.deleteOne({ _id: new ObjectId(id) });
+      if (result.deletedCount === 1) {
+          res.status(200).send('Report deleted successfully');
+      } else {
+          res.status(400).send('Failed to delete report');
+      }
+    }
+    );
+
+    app.get('/post-reports/report', verifyToken, async (req, res) => {
+      try {
+          const postReports = await PostReportsCollection.find().sort({ date: -1 }).toArray();
+  
+          const updatedReports = await Promise.all(postReports.map(async (report) => {
+              const post = await PostCollection.findOne({ _id: new ObjectId(report.postID) });
+              if (post) {
+                  return {
+                      ...report,
+                      postTitle: post.title
+                  };
+              }
+              return report;
+          }));
+          res.json(updatedReports);
+      } catch (error) {
+          res.status(500).json({ error: 'An error occurred while fetching post reports' });
+      }
+  });
+
+  app.get('/comment-reports/report', verifyToken, async (req, res) => {
+    try {
+        const commentReports = await CommentsReportsCollection.find().sort({ date: -1 }).toArray();
+
+        const updatedReports = await Promise.all(commentReports.map(async (report) => {
+            const comment = await CommentsCollection.findOne({ _id: new ObjectId(report.commentID) });
+            if (comment) {
+                return {
+                    ...report,
+                    comment: comment.comment
+                };
+            }
+            return report;
+        }));
+        res.json(updatedReports);
+    } catch (error) {
+        res.status(500).json({ error: 'An error occurred while fetching comment reports' });
+    }
+}
+);
+  
+  
+
+    app.delete('/comments/:id', async (req, res) => {
+      const id = req.params.id;
+      const result = await CommentsCollection.deleteOne({ _id: new ObjectId(id) });
+      if (result.deletedCount === 1) {
+          res.status(200).send('Comment deleted successfully');
+      } else {
+          res.status(400).send('Failed to delete comment');
+      }
+    }
+    );
+
+    
+
+
+    app.get('/comments-reports',async(req, res)=>{
+      const commentsReports = await CommentsReportsCollection.find().toArray()
+      res.json(commentsReports)
+    }
+    )
+
+    app.post('/comments',async (req, res) => {
+      const { postID, email, name, photo, comment, date } = req.body;
+      const newComment = await CommentsCollection.insertOne({postID, email, name, photo, comment, date});
+      res.status(201).send('Comment created successfully');
+    }
+    );
     //Votes
     app.post('/votes', async (req, res) => {
       const { user, postId, voteType, date } = req.body;
@@ -66,6 +198,12 @@ async function run() {
       res.status(201).send('Vote created successfully');
     }
     );
+
+    app.get('/post/:id', async (req, res) => {
+      const id = req.params.id;
+      const post = await PostCollection.findOne({ _id: new ObjectId(id) });
+      res.json(post);
+    });
 
     app.delete('/votes/:id', async (req, res) => {
       const id = req.params.id;
@@ -223,18 +361,6 @@ async function run() {
       }
     });
 
-    app.get('/post-reports', verifyToken, (req, res)=>{
-      const postReports = PostReportsCollection.find().toArray()
-      res.json(postReports)
-    })
-
-
-    app.get('/comments-reports', verifyToken, (req, res)=>{
-      const commentsReports = CommentsReportsCollection.find().toArray()
-      res.json(commentsReports)
-    }
-    )
-
     app.post('/jwt', (req, res) => {
         const user = req.body;
         const token = jwt.sign(user, process.env.JWT_Secret, { expiresIn: '1h' });
@@ -278,7 +404,6 @@ async function run() {
 
     app.get('/posts/mypost/:email', async (req, res) => {
       const email = req.params.email;
-      console.log("hey",email); 
       const posts = await PostCollection.find({ owner: email }).sort({ dateAdded: -1 }).toArray();
       res.json(posts);
     }
@@ -290,6 +415,8 @@ async function run() {
         const posts = await PostCollection.find({ owner: email }).toArray();
         res.json(posts);
     });
+
+
 
     app.delete('/post/:id', async (req, res) => {
         const id = req.params.id;
@@ -345,7 +472,6 @@ async function run() {
         const { name, email, dateAdded } = req.body;
         const tag = await TagCollection.findOne({ name: name });
         if (tag) {
-            console.log('Tag already exists');
             res.status(400).send('Tag already exists');
         } else {
             const newTag = await TagCollection.insertOne({ name, email, dateAdded });
@@ -417,7 +543,6 @@ async function run() {
     });
 
     app.post('/announcement', verifyToken, async (req, res) => {
-      console.log("asasasass");
       const { title, authorName,authorEmail, authorPhoto ,description,date } = req.body;
       const newAnnouncement = await AnnouncementsCollection.insertOne({ title, authorName,authorEmail, authorPhoto, description,date });
       res.status(201).send('Announcement created successfully');
@@ -445,7 +570,7 @@ async function run() {
         }
     });
 
-    console.log("Successfully connected to MongoDB!");
+    //console.log("Successfully connected to MongoDB!");
   } finally {
     // await client.close();
   }
