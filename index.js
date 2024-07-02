@@ -45,7 +45,7 @@ const verifyToken = (req, res, next) => {
 
 async function run() {
   try {
-    await client.connect();
+    //await client.connect();
     const UserCollection = client.db("hive").collection("users");
     const AnnouncementsCollection = client.db("hive").collection("announcements");
     const CommentsCollection = client.db("hive").collection("comments");
